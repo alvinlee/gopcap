@@ -104,14 +104,19 @@ func Openoffline(file string) (handle *Pcap, err string) {
 	return
 }
 
-func(p *Pcap) Next() (pkt *Packet) {
-	var pkthdr C.struct_pcap_pkthdr
-	var buf unsafe.Pointer
-	buf = unsafe.Pointer(C.pcap_next(p.cptr, &pkthdr))
-	if nil == buf {
-		return nil
+func(p *Pcap) Next() (*Packet, string) {
+	var pkthdr *C.struct_pcap_pkthdr
+	var buf *C.u_char
+	switch C.pcap_next_ex(p.cptr, &pkthdr, &buf) {
+	case 0:
+		return nil, "read time out"
+	case -1:
+		return nil, p.Geterror()
+	case -2:
+		return nil, "savefile eof"
 	}
-	pkt = new(Packet)
+
+	pkt := new(Packet)
 	pkt.Time.Sec = int32(pkthdr.ts.tv_sec)
 	pkt.Time.Usec = int32(pkthdr.ts.tv_usec)
 	pkt.Caplen = uint32(pkthdr.caplen)
@@ -119,10 +124,10 @@ func(p *Pcap) Next() (pkt *Packet) {
 	pkt.Data = make([]byte, pkthdr.caplen)
 
 	if pkthdr.caplen > 0 {
-		C.memcpy( unsafe.Pointer(&pkt.Data[0]), buf, C.size_t(pkthdr.caplen))
+		C.memcpy( unsafe.Pointer(&pkt.Data[0]), unsafe.Pointer(buf), C.size_t(pkthdr.caplen))
 	}
 
-	return
+	return pkt, ""
 }
 
 func(p *Pcap) Geterror() string {
