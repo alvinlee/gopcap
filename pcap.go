@@ -3,6 +3,7 @@ package pcap
 /*
 struct pcap { int dummy; };
 #include <stdlib.h>
+#include <string.h>
 #include <pcap.h>
 */
 import "C"
@@ -104,7 +105,7 @@ func Openoffline(file string) (handle *Pcap, err string) {
 }
 
 func(p *Pcap) Next() (pkt *Packet) {
-	var pkthdr _Cstruct_pcap_pkthdr
+	var pkthdr C.struct_pcap_pkthdr
 	var buf unsafe.Pointer
 	buf = unsafe.Pointer(C.pcap_next(p.cptr, &pkthdr))
 	if nil == buf {
@@ -117,8 +118,8 @@ func(p *Pcap) Next() (pkt *Packet) {
 	pkt.Len = uint32(pkthdr.len)
 	pkt.Data = make([]byte, pkthdr.caplen)
 
-	for i := uint32(0) ; i < pkt.Caplen ; i++ {
-		pkt.Data[i] = *(*byte)(unsafe.Pointer(uintptr(buf) + uintptr(i)))
+	if pkthdr.caplen > 0 {
+		C.memcpy( unsafe.Pointer(&pkt.Data[0]), buf, C.size_t(pkthdr.caplen))
 	}
 
 	return
@@ -129,7 +130,7 @@ func(p *Pcap) Geterror() string {
 }
 
 func(p *Pcap) Getstats() (stat *Stat, err string) {
-	var cstats _Cstruct_pcap_stat
+	var cstats C.struct_pcap_stat
 	if -1 == C.pcap_stats(p.cptr, &cstats) {
 		return nil, p.Geterror()
 	}
@@ -144,7 +145,7 @@ func(p *Pcap) Getstats() (stat *Stat, err string) {
 }
 
 func(p *Pcap) Setfilter(expr string) (err string) {
-	var bpf _Cstruct_bpf_program
+	var bpf C.struct_bpf_program
 
 	if -1 == C.pcap_compile(p.cptr, &bpf, C.CString(expr), 1, 0) {
 		return p.Geterror()
@@ -193,19 +194,19 @@ func DatalinkValueToDescription(dlt int) string {
 func Findalldevs() (ifs []Interface, err string) {
 	var buf *C.char
 	buf = (*C.char)(C.calloc(ERRBUF_SIZE, 1))
-	var alldevsp *_Cstruct_pcap_if
+	var alldevsp *C.pcap_if_t
 
-	if -1 == C.pcap_findalldevs((**C.pcap_if_t)(&alldevsp), buf) {
+	if -1 == C.pcap_findalldevs(&alldevsp, buf) {
 		ifs = nil
 		err = C.GoString(buf)
 	} else {
-		dev := alldevsp
+		dev := (*C.struct_pcap_if)(alldevsp)
 		var i uint32
 		for i = 0; dev != nil ; dev = dev.next {
 			i++
 		}
 		ifs = make([]Interface, i)
-		dev = alldevsp
+		dev = (*C.struct_pcap_if)(alldevsp)
 		for j := uint32(0) ; dev != nil ; dev = dev.next {
 			var iface Interface
 			iface.Name = C.GoString(dev.name)
@@ -214,22 +215,17 @@ func Findalldevs() (ifs []Interface, err string) {
 			ifs[j] = iface
 			j++
 		}
-		C.pcap_freealldevs((*C.pcap_if_t)(alldevsp))
+		C.pcap_freealldevs(alldevsp)
 	}
 	C.free(unsafe.Pointer(buf))
 	return
 }
 
 func(p *Pcap)  Inject(data []byte) (err string) {
-	buf := (*C.char)(C.malloc((C.size_t)(len(data))))
-
-	for i:=0 ; i < len(data) ; i++ {
-		*(*byte)(unsafe.Pointer(uintptr(unsafe.Pointer(buf)) + uintptr(i))) = data[i]
-	}
-	
-	if -1 == C.pcap_inject(p.cptr, unsafe.Pointer(buf), (C.size_t)(len(data))) {
+	ret := C.pcap_inject(p.cptr, unsafe.Pointer(&data[0]), (C.size_t)(len(data)))
+	if ret == -1 {
 		err = p.Geterror()
 	}
-	C.free(unsafe.Pointer(buf))
-	return
+	
+	return 
 }
