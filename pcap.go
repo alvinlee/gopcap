@@ -1,236 +1,208 @@
 package pcap
 
 /*
-struct pcap { int dummy; };
 #include <stdlib.h>
 #include <string.h>
 #include <pcap.h>
 */
 import "C"
 import (
-	"unsafe"
+    "unsafe"
+    "os"
 )
 
 const (
-	ERRBUF_SIZE = 256
-
-	// according to pcap-linktype(7)
-	LINKTYPE_NULL = 0
-	LINKTYPE_ETHERNET = 1
-	LINKTYPE_TOKEN_RING = 6
-	LINKTYPE_ARCNET = 7
-	LINKTYPE_SLIP = 8
-	LINKTYPE_PPP = 9
-	LINKTYPE_FDDI = 10
-	LINKTYPE_ATM_RFC1483 = 100
-	LINKTYPE_RAW = 101
-	LINKTYPE_PPP_HDLC = 50
-	LINKTYPE_PPP_ETHER = 51
-	LINKTYPE_C_HDLC = 104
-	LINKTYPE_IEEE802_11 = 105
-	LINKTYPE_FRELAY = 107
-	LINKTYPE_LOOP = 108
-	LINKTYPE_LINUX_SLL = 113
-	LINKTYPE_LTALK = 104
-	LINKTYPE_PFLOG = 117
-	LINKTYPE_PRISM_HEADER = 119
-	LINKTYPE_IP_OVER_FC = 122
-	LINKTYPE_SUNATM = 123
-	LINKTYPE_IEEE802_11_RADIO = 127
-	LINKTYPE_ARCNET_LINUX = 129
-	LINKTYPE_LINUX_IRDA = 144
-	LINKTYPE_LINUX_LAPD = 177
+    ERRBUF_SIZE = C.PCAP_ERRBUF_SIZE
 )
 
 type Pcap struct {
-	cptr *C.pcap_t
+    cptr *C.pcap_t
 }
 
 type Packet struct {
-	Time struct { 
-		Sec int32
-		Usec int32 
-	}
-	Caplen uint32
-	Len uint32
-	Data []byte
+    Time struct {
+        Sec  int32
+        Usec int32
+    }
+    Caplen uint32
+    Len    uint32
+    Data   []byte
 }
 
-type Stat struct {
-	PacketsReceived uint32
-	PacketsDropped uint32
-	PacketsIfDropped uint32
+type Stats struct {
+    Received  uint32
+    Dropped   uint32
+    IfDropped uint32
 }
 
 type Interface struct {
-	Name string
-	Description string
-	// TODO: add more elements
+    Name        string
+    Desc string
+    // TODO: add more elements
 }
 
-func Openlive(device string, snaplen int32, promisc bool, timeout_ms int32) (handle *Pcap, err string) {
-	var buf *C.char
-	buf = (*C.char)(C.calloc(ERRBUF_SIZE, 1))
-	h := new(Pcap)
-	var pro int32
-	if promisc { 
-		pro = 1 
-	} else { 
-		pro = 0 
-	}
-	h.cptr = C.pcap_open_live(C.CString(device), C.int(snaplen), C.int(pro), C.int(timeout_ms), buf)
-	if nil == h.cptr {
-		handle = nil
-		err = C.GoString(buf)
-	} else {
-		handle = h
-	}
-	C.free(unsafe.Pointer(buf))
-	return
+func Openlive(dev string, snaplen int32, promisc bool, timeout int32) (ret *Pcap, msg string) {
+    cdev := C.CString(dev)
+    defer C.free(unsafe.Pointer(cdev))
+
+    var cpro C.int
+    if promisc {
+        cpro = 1
+    }
+
+    var buf [ERRBUF_SIZE]byte
+    cbuf := (*C.char)(unsafe.Pointer(&buf[0]))
+    cptr := C.pcap_open_live(cdev, C.int(snaplen), C.int(cpro), C.int(timeout), cbuf)
+    clen := C.strlen(cbuf)
+    msg = string(buf[:clen])
+    if cptr != nil {
+        ret = &Pcap{cptr: cptr}
+    }
+
+    return
 }
 
-func Openoffline(file string) (handle *Pcap, err string) {
-	var buf *C.char
-	buf = (*C.char)(C.calloc(ERRBUF_SIZE, 1))
-	h := new(Pcap)
-	h.cptr = C.pcap_open_offline(C.CString(file), buf)
-	if nil == h.cptr {
-		handle = nil
-		err = C.GoString(buf)
-	} else {
-		handle = h
-	}
-	C.free(unsafe.Pointer(buf))
-	return
+func Openoffline(file string) (ret *Pcap, msg string) {
+    cfile := C.CString(file)
+    defer C.free(unsafe.Pointer(cfile))
+
+    var buf [ERRBUF_SIZE]byte
+    cbuf := (*C.char)(unsafe.Pointer(&buf[0]))
+    cptr := C.pcap_open_offline(cfile, cbuf)
+    clen := C.strlen(cbuf)
+    msg = string(buf[:clen])
+    if cptr != nil {
+        ret = &Pcap{cptr: cptr}
+    }
+
+    return
 }
 
-func(p *Pcap) Next() (*Packet, string) {
-	var pkthdr *C.struct_pcap_pkthdr
-	var buf *C.u_char
-	switch C.pcap_next_ex(p.cptr, &pkthdr, &buf) {
-	case 0:
-		return nil, "read time out"
-	case -1:
-		return nil, p.Geterror()
-	case -2:
-		return nil, "savefile eof"
-	}
+func (p *Pcap) Next() (*Packet, os.Error) {
+    var header *C.struct_pcap_pkthdr
+    var buf *C.u_char
+    switch C.pcap_next_ex(p.cptr, &header, &buf) {
+    case 0:
+        return nil, os.NewError("read time out")
+    case -1:
+        return nil, os.NewError(p.Geterror())
+    case -2:
+        return nil, os.NewError("savefile eof")
+    }
 
-	pkt := new(Packet)
-	pkt.Time.Sec = int32(pkthdr.ts.tv_sec)
-	pkt.Time.Usec = int32(pkthdr.ts.tv_usec)
-	pkt.Caplen = uint32(pkthdr.caplen)
-	pkt.Len = uint32(pkthdr.len)
-	pkt.Data = make([]byte, pkthdr.caplen)
+    ret := new(Packet)
+    ret.Time.Sec = int32(header.ts.tv_sec)
+    ret.Time.Usec = int32(header.ts.tv_usec)
+    ret.Caplen = uint32(header.caplen)
+    ret.Len = uint32(header.len)
+    ret.Data = make([]byte, header.caplen)
 
-	if pkthdr.caplen > 0 {
-		C.memcpy( unsafe.Pointer(&pkt.Data[0]), unsafe.Pointer(buf), C.size_t(pkthdr.caplen))
-	}
+    // if header.caplen > 0 {
+    //     C.memcpy(unsafe.Pointer(&ret.Data[0]), unsafe.Pointer(buf), C.size_t(header.caplen))
+    // }
 
-	return pkt, ""
+    return ret, nil
 }
 
-func(p *Pcap) Geterror() string {
-	return C.GoString(C.pcap_geterr(p.cptr))
+func (p *Pcap) Geterror() string {
+    return C.GoString(C.pcap_geterr(p.cptr))
 }
 
-func(p *Pcap) Getstats() (stat *Stat, err string) {
-	var cstats C.struct_pcap_stat
-	if -1 == C.pcap_stats(p.cptr, &cstats) {
-		return nil, p.Geterror()
+func (p *Pcap) Getstats() (stats *Stats) {
+    var cstats C.struct_pcap_stat
+	if C.pcap_stats(p.cptr, &cstats) == -1 {
+		return
 	}
 
-	stats := new(Stat)
+    stats = new(Stats)
+    stats.Received = uint32(cstats.ps_recv)
+    stats.Dropped = uint32(cstats.ps_drop)
+    stats.IfDropped = uint32(cstats.ps_ifdrop)
 
-	stats.PacketsReceived = uint32(cstats.ps_recv)
-	stats.PacketsDropped = uint32(cstats.ps_drop)
-	stats.PacketsIfDropped = uint32(cstats.ps_ifdrop)
-
-	return stats, ""
+    return
 }
 
-func(p *Pcap) Setfilter(expr string) (err string) {
-	var bpf C.struct_bpf_program
+func (p *Pcap) Setfilter(expr string) os.Error {
+    var bpf C.struct_bpf_program
+	cexpr := C.CString(expr)
+	defer C.free(unsafe.Pointer(cexpr))
 
-	if -1 == C.pcap_compile(p.cptr, &bpf, C.CString(expr), 1, 0) {
-		return p.Geterror()
-	}
+	if C.pcap_compile(p.cptr, &bpf, cexpr, 1, 0) == -1 {
+        return os.NewError(p.Geterror())
+    }
+	defer C.pcap_freecode(&bpf)
 
-	if -1 == C.pcap_setfilter(p.cptr, &bpf) {
-		C.pcap_freecode(&bpf)
-		return p.Geterror()
-	}
+    if C.pcap_setfilter(p.cptr, &bpf) == -1 {
+		return os.NewError(p.Geterror())
+    }
 
-	C.pcap_freecode(&bpf)
-	return ""
+    return nil
+}
+
+func (p *Pcap) Datalink() int {
+    return int(C.pcap_datalink(p.cptr))
+}
+
+func (p *Pcap) Setdatalink(dlt int) (err os.Error) {
+    if C.pcap_set_datalink(p.cptr, C.int(dlt)) == -1 {
+		err = os.NewError(p.Geterror())
+    }
+    return
 }
 
 func Version() string {
-	return C.GoString(C.pcap_lib_version())
+    return C.GoString(C.pcap_lib_version())
 }
 
-func(p *Pcap) Datalink() int {
-	return int(C.pcap_datalink(p.cptr))
+func DatalinkName(dlt int) (ret string) {
+    name := C.pcap_datalink_val_to_name(C.int(dlt))
+    if name != nil {
+        ret = C.GoString(name)
+    }
+    return
 }
 
-func(p *Pcap) Setdatalink(dlt int) string {
-	if -1 == C.pcap_set_datalink(p.cptr, C.int(dlt)) {
-		return p.Geterror()
-	}
-	return ""
+func DatalinkDesc(dlt int) (ret string) {
+    desc := C.pcap_datalink_val_to_description(C.int(dlt))
+    if desc != nil {
+        ret = C.GoString(desc)
+    }
+    return
 }
 
-func DatalinkValueToName(dlt int) string {
-	name := C.pcap_datalink_val_to_name(C.int(dlt))
-	if nil != name {
-		return C.GoString(name)
-	}
-	return ""
-}
+func Findalldevs() (ifs []Interface, err os.Error) {
+    var alldevsp *C.pcap_if_t
+    var buf [ERRBUF_SIZE]byte
+    cbuf := (*C.char)(unsafe.Pointer(&buf[0]))
+	
+    if C.pcap_findalldevs(&alldevsp, cbuf) == -1 {
+		clen := C.strlen(cbuf)
+		err = os.NewError(string(buf[:clen]))
+		return 
+    }
+	defer C.pcap_freealldevs(alldevsp)
 
-func DatalinkValueToDescription(dlt int) string {
-	desc := C.pcap_datalink_val_to_description(C.int(dlt))
-	if nil != desc {
-		return C.GoString(desc)
-	}
-	return ""
-}
-
-func Findalldevs() (ifs []Interface, err string) {
-	var buf *C.char
-	buf = (*C.char)(C.calloc(ERRBUF_SIZE, 1))
-	var alldevsp *C.pcap_if_t
-
-	if -1 == C.pcap_findalldevs(&alldevsp, buf) {
-		ifs = nil
-		err = C.GoString(buf)
-	} else {
-		dev := (*C.struct_pcap_if)(alldevsp)
-		var i uint32
-		for i = 0; dev != nil ; dev = dev.next {
-			i++
-		}
-		ifs = make([]Interface, i)
-		dev = (*C.struct_pcap_if)(alldevsp)
-		for j := uint32(0) ; dev != nil ; dev = dev.next {
-			var iface Interface
-			iface.Name = C.GoString(dev.name)
-			iface.Description = C.GoString(dev.description)
-			// TODO: add more elements
-			ifs[j] = iface
-			j++
-		}
-		C.pcap_freealldevs(alldevsp)
-	}
-	C.free(unsafe.Pointer(buf))
-	return
-}
-
-func(p *Pcap)  Inject(data []byte) (err string) {
-	ret := C.pcap_inject(p.cptr, unsafe.Pointer(&data[0]), (C.size_t)(len(data)))
-	if ret == -1 {
-		err = p.Geterror()
+    dev := (*C.struct_pcap_if)(alldevsp)
+	i := 0
+    for ; dev != nil; dev = dev.next {
+		i++
 	}
 	
-	return 
+    ifs = make([]Interface, i)
+    for ; dev != nil; dev = dev.next {
+		ifs[i].Name = C.GoString(dev.name)
+		ifs[i].Desc = C.GoString(dev.description)
+		i++
+	}
+	
+    return
+}
+
+func (p *Pcap) Inject(data []byte) (err os.Error) {
+    if C.pcap_inject(p.cptr, unsafe.Pointer(&data[0]),
+		(C.size_t)(len(data))) == -1 {
+        err = os.NewError(p.Geterror())
+    }
+
+    return
 }

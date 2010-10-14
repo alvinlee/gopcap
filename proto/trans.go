@@ -1,36 +1,36 @@
 package proto
 
 import (
-	"os"
-	// "io"
-	// "encoding/binary"
+    "os"
+    // "io"
+    // "encoding/binary"
 )
 
 const (
-	IP_TCP = 6
-	IP_UDP = 17
-	
-	TCP_FIN = 1 << iota
-	TCP_SYN
-	TCP_RST
-	TCP_PSH
-	TCP_ACK
-	TCP_URG
+    IP_TCP = 6
+    IP_UDP = 17
+
+    TCP_FIN = 1 << iota
+    TCP_SYN
+    TCP_RST
+    TCP_PSH
+    TCP_ACK
+    TCP_URG
 )
 
 type TCP struct {
-	SrcPort uint16
-	DstPort uint16
-	SeqNum uint32
-	AckNum uint32
-	OffFlag uint16
-	Window uint16
-	Checksum uint16
-	Urgent uint16
+    SrcPort  uint16
+    DstPort  uint16
+    SeqNum   uint32
+    AckNum   uint32
+    OffFlag  uint16
+    Window   uint16
+    Checksum uint16
+    Urgent   uint16
 }
 
 func (d *Decoder) DecodeTrans() (interface{}, os.Error) {
-	return nil, nil
+    return nil, nil
 }
 
 // func DecodeTcp(r io.Reader) (*Tcp, os.Error) {
@@ -41,7 +41,6 @@ func (d *Decoder) DecodeTrans() (interface{}, os.Error) {
 // 	}
 
 
-	
 // 	tcp.SrcPort = binary.BigEndian.Uint16(tcp.Body[0:2])
 // 	tcp.DstPort = binary.BigEndian.Uint16(tcp.Body[2:4])
 // 	tcp.Seq = binary.BigEndian.Uint32(tcp.Body[4:8])
@@ -60,7 +59,7 @@ func (d *Decoder) DecodeTrans() (interface{}, os.Error) {
 // 	if length < 8 && int(length) > len(udp.Body) {
 // 		return os.NewError("bad udp length")
 // 	}
-	
+
 // 	udp.Body = udp.Body[8:length]
 // 	return nil
 // }
@@ -84,5 +83,3 @@ func (d *Decoder) DecodeTrans() (interface{}, os.Error) {
 
 // 	return buf
 // }
-
-
