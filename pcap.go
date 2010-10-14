@@ -97,9 +97,9 @@ func (p *Pcap) Next() (*Packet, os.Error) {
     ret.Len = uint32(header.len)
     ret.Data = make([]byte, header.caplen)
 
-    // if header.caplen > 0 {
-    //     C.memcpy(unsafe.Pointer(&ret.Data[0]), unsafe.Pointer(buf), C.size_t(header.caplen))
-    // }
+    if header.caplen > 0 {
+        C.memcpy(unsafe.Pointer(&ret.Data[0]), unsafe.Pointer(buf), C.size_t(header.caplen))
+    }
 
     return ret, nil
 }

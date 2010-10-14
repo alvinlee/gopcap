@@ -7,7 +7,7 @@ import (
 
 type Decoder struct {
     reader    io.Reader
-    LinkType  uint
+    LinkType  int
     NetType   uint
     TransType uint
     Length    uint
@@ -19,7 +19,7 @@ type Protocol struct {
     Trans interface{}
 }
 
-func NewDecoder(t uint, r io.Reader) *Decoder {
+func NewDecoder(t int, r io.Reader) *Decoder {
     return &Decoder{reader: r, LinkType: t}
 }
 
