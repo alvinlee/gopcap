@@ -1,16 +1,19 @@
-include $(GOROOT)/src/Make.inc
+DIRS = pcap	proto test dump
 
-TARG=pcap
-CGOFILES=pcap.go
-CGO_LDFLAGS=-lpcap
-CLEANFILES=pcaptest tcpdump
+all: install
+install: $(addsuffix .install, $(DIRS))
+clean: $(addsuffix .clean, $(DIRS))
+test: $(addsuffix .test, $(DIRS))
+nuke: $(addsuffix .nuke, $(DIRS))
 
-include $(GOROOT)/src/Make.pkg
+%.install:
+	$(MAKE) -C $* $(MFLAGS) install
 
-pcaptest: pcaptest.go install
-	$(GC) pcaptest.go
-	$(LD) -o $@ pcaptest.$(O)
+%.clean:
+	$(MAKE) -C $* $(MFLAGS) clean
 
-tcpdump: tcpdump.go install
-	$(GC) tcpdump.go
-	$(LD) -o $@ tcpdump.$(O)
+%.test:
+	$(MAKE) -C $* $(MFLAGS) test
+
+%.nuke:
+	$(MAKE) -C $* $(MFLAGS) nuke

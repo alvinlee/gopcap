@@ -7,6 +7,7 @@ import (
 	"time"
 	"os"
 	"bufio"
+	pp "pcap/proto"
 )
 
 const (
@@ -46,7 +47,7 @@ func main() {
 
 	if *device == "" {
 		devs, err := pcap.Findalldevs()
-		if err != "" {
+		if err != nil {
 			fmt.Fprintf(errout, "tcpdump: couldn't find any devices: %s\n", err)
 		}
 		if 0 == len(devs) {
@@ -55,29 +56,40 @@ func main() {
 		*device = devs[0].Name
 	}
 
-	h, err := pcap.Openlive(*device, int32(*snaplen), true, 0)
-	if h == nil {
-		fmt.Fprintf(errout, "tcpdump: %s\n", err)
+	h, msg := pcap.Openlive(*device, int32(*snaplen), true, 0)
+	if msg != "" {
+		fmt.Fprintf(errout, "tcpdump: %s\n", msg)
 		errout.Flush()
+	}
+	
+	if h == nil {
 		return
 	}
 
 	if expr != "" {
 		ferr := h.Setfilter(expr)
-		if ferr != "" {
+		if ferr != nil {
 			fmt.Fprintf(out, "tcpdump: %s\n", ferr)
 			out.Flush()
 		}
 	}
 
-	for pkt := h.Next() ; pkt != nil ; pkt = h.Next() {
+	for {
+		pkt, err := h.Next()
+		if err != nil {
+			fmt.Println("capture:", err)
+		}
+
+		if pkt == nil {
+			continue
+		}
+
 		Printpacket(pkt)
 		if *hexdump {
 			Hexdump(pkt)
 		}
 		out.Flush()
 	}
-
 }
 
 
@@ -155,7 +167,7 @@ func Decodearp(pkt []byte) {
 
 	fmt.Fprintf(out, "ARP %s ", Arpop(arp.Operation))
 
-	if arp.Addrtype == pcap.LINKTYPE_ETHERNET && arp.Protocol == TYPE_IP {
+	if arp.Addrtype == pp.LINKTYPE_ETHERNET && arp.Protocol == TYPE_IP {
 		fmt.Fprintf(out, "%012x (", Decodemac(arp.SourceHwAddress))
 		Printip(arp.SourceProtAddress)
 		fmt.Fprintf(out, ") > %012x (", Decodemac(arp.DestHwAddress))

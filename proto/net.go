@@ -39,7 +39,7 @@ func (d *Decoder) DecodeNet() (interface{}, os.Error) {
     return nil, os.NewError("unkown network type")
 }
 
-func (d *Decoder) DecodeIPv4() (interface{}, os.Error) {
+func (d *Decoder) DecodeIPv4() (*IPv4, os.Error) {
     ip := new(IPv4Fix)
     ret := binary.Read(d.reader, binary.BigEndian, ip)
     if ret != nil {
@@ -50,20 +50,24 @@ func (d *Decoder) DecodeIPv4() (interface{}, os.Error) {
     if ver != 4 {
         return nil, os.NewError("not ip v4")
     }
-
+	
     var options []byte
-    offset := uint16((ip.VerHL & 0x0F) * 4)
-    if offset < 20 || ip.Length < offset {
+	const MinLen = 20
+	offset := uint16((ip.VerHL & 0x0F) * 4)
+    if offset < MinLen || ip.Length < offset {
         return nil, os.NewError("bad ip v4 length")
-    } else if offset > 20 {
-        offset -= 20
-        options = make([]byte, offset)
+    }
 
+	if offset > MinLen {
+        options = make([]byte, offset - MinLen)
         _, ret := io.ReadFull(d.reader, options)
         if ret != nil {
             return nil, ret
         }
     }
+
+	d.TransType = uint(ip.Protocol)
+	d.Length = uint(ip.Length - offset)
 
     return &IPv4{ip, options}, nil
 }
