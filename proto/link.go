@@ -54,28 +54,30 @@ type LINK_LINUX_SLL struct {
     NetType uint16
 }
 
-func (d *Decoder) DecodeLink() (interface{}, os.Error) {
-    switch d.LinkType {
+func (p *Protocol) DecodeLink() os.Error {
+    switch p.LinkType {
     case LINKTYPE_ETHERNET:
         eth := new(LINK_ETHERNET)
-        err := binary.Read(d.reader, binary.BigEndian, eth)
+        err := binary.Read(p.reader, binary.BigEndian, eth)
         if err != nil {
-            return nil, err
+			return os.NewError("read link of ethernet - " + err.String())
         }
 
-        d.NetType = uint(eth.NetType)
-        return eth, nil
+        p.NetType = uint(eth.NetType)
+		p.Link = eth
+        return nil
 
     case LINKTYPE_LINUX_SLL:
         sll := new(LINK_LINUX_SLL)
-        err := binary.Read(d.reader, binary.BigEndian, sll)
+        err := binary.Read(p.reader, binary.BigEndian, sll)
         if err != nil {
-            return nil, err
+            return os.NewError("read link of linux sll - " + err.String())
         }
 
-        d.NetType = uint(sll.NetType)
-        return sll, nil
+        p.NetType = uint(sll.NetType)
+		p.Link = sll
+        return nil
     }
 
-    return nil, os.NewError("unkown link type")
+    return os.NewError("unkown link type")
 }

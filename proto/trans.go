@@ -42,86 +42,66 @@ type UDP struct {
 	Checksum uint16
 }
 
-func (d *Decoder) DecodeTrans() (interface{}, os.Error) {
-	switch d.TransType {
+func (p *Protocol) DecodeTrans() os.Error {
+	switch p.TransType {
 	case IP_TCP:
-		return d.DecodeTcp()
+		return p.DecodeTcp()
 	case IP_UDP:
-		return d.DecodeUdp()
+		return p.DecodeUdp()
 	}
 	
-    return nil, os.NewError("unkown transport type")
+    return os.NewError("unkown transport type")
 }
 
-func (d *Decoder) DecodeTcp() (*TCP, os.Error) {
+func (p *Protocol) DecodeTcp() os.Error {
 	tcp := new(TCPFix)
-	ret := binary.Read(d.reader, binary.BigEndian, tcp)
-	if ret != nil {
-		return nil, ret
+	err := binary.Read(p.reader, binary.BigEndian, tcp)
+	if err != nil {
+		return os.NewError("read tcp header - " + err.String())
 	}
 
     var options, oob []byte
 	const MinLen = 20
 	offset := (tcp.OffFlag & 0xF000) >> 10
     if offset < MinLen {
-        return nil, os.NewError("bad tcp offset")
+        return os.NewError("bad tcp offset")
     }
 
 	if offset > MinLen {
         options = make([]byte, offset - MinLen)
-        _, ret := io.ReadFull(d.reader, options)
-        if ret != nil {
-            return nil, ret
+        _, err := io.ReadFull(p.reader, options)
+        if err != nil {
+            return os.NewError("read tcp options - " + err.String())
         }
     }
 
-	d.Length -= uint(offset)
-
+	p.Length -= uint(offset)
 	if tcp.OffFlag & TCP_URG > 0 {
 		urgLen := tcp.Urgent + 8 - offset
 		if urgLen <= 0 {
-			return nil, os.NewError("bad urgent length")
+			return os.NewError("bad urgent length")
 		}
 
 		oob = make([]byte, urgLen)
-        _, ret := io.ReadFull(d.reader, oob)
-        if ret != nil {
-            return nil, ret
+        _, err := io.ReadFull(p.reader, oob)
+        if err != nil {
+            return os.NewError("read tcp oob - " + err.String())
         }
 
-		d.Length -= uint(urgLen)
+		p.Length -= uint(urgLen)
 	}
 
-	return &TCP{tcp, options, oob}, nil
+	p.Trans = &TCP{tcp, options, oob}
+	return nil
 }
 
-func (d *Decoder) DecodeUdp() (udp *UDP, err os.Error) {
-	udp = new(UDP)
-	err = binary.Read(d.reader, binary.BigEndian, udp)
+func (p *Protocol) DecodeUdp() os.Error {
+	udp := new(UDP)
+	err := binary.Read(p.reader, binary.BigEndian, udp)
 	if err != nil {
-		return
+		return os.NewError("read udp header - " + err.String())
 	}
 
-	d.Length = uint(udp.Length) - 8
-	return
+	p.Length = uint(udp.Length) - 8
+	return nil
 }
-
-// func (tcp *Tcp) String() string {
-// 	return fmt.Sprintf("TCP %v:%d -> %v:%d %d %d %d %b \t%x", tcp.Src, tcp.SrcPort,
-// 		tcp.Dst, tcp.DstPort, tcp.Seq, tcp.Ack, tcp.Window, tcp.Flags, stripStr(tcp.Body))
-// }
-
-// func (udp *Udp) String() string {
-// 	return fmt.Sprintf("UDP %v:%d -> %v:%d \t%x", udp.Src, udp.SrcPort,
-// 		udp.Dst, udp.DstPort, stripStr(udp.Body))
-// }
-
-// func stripStr(buf []byte) []byte{
-// 	const max = 20
-// 	cur := len(buf)
-// 	if cur > max {
-// 		return buf[:max]
-// 	}
-
-// 	return buf
-// }

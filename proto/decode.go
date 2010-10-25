@@ -5,41 +5,37 @@ import (
     "os"
 )
 
-type Decoder struct {
+type Protocol struct {
     reader    io.Reader
     LinkType  int
     NetType   uint
     TransType uint
     Length    uint
-}
-
-type Protocol struct {
     Link  interface{}
     Net   interface{}
     Trans interface{}
 }
 
-func NewDecoder(t int, r io.Reader) *Decoder {
-    return &Decoder{reader: r, LinkType: t}
+func Decode(t int, r io.Reader) (*Protocol, os.Error) {
+	p := &Protocol{reader: r, LinkType: t}
+    return p, p.Decode()
 }
-
-func (d *Decoder) Decode() (p *Protocol, e os.Error) {
-    var link, net, trans interface{}
-    link, e = d.DecodeLink()
+ 
+func (p *Protocol) Decode() (e os.Error) {
+	e = p.DecodeLink()
     if e != nil {
         return
     }
 
-    net, e = d.DecodeNet()
+	e = p.DecodeNet()
     if e != nil {
         return
     }
 
-    trans, e = d.DecodeTrans()
+    e = p.DecodeTrans()
     if e != nil {
         return
     }
 
-    p = &Protocol{link, net, trans}
     return
 }
